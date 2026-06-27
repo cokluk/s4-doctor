@@ -102,17 +102,15 @@ local function spawnApiProcess()
     local serverJs = joinPath(root, 'api', 'server.js')
     local nodeBin = resolveNodeBinary()
 
+    local logPath = joinPath(root, 'api_debug.log')
+    
     if IS_WINDOWS then
-        local cmd = ('start /B "" cmd /c "set S4_DOCTOR_PORT=%d&& "%s" "%s" > nul 2>&1"'):format(
-            API_PORT,
-            nodeBin,
-            serverJs
-        )
+        local cmd = ('cmd /c "set S4_DOCTOR_PORT=%d && start /B "" "%s" "%s" > "%s" 2>&1"'):format(API_PORT, nodeBin, serverJs, logPath)
         os.execute(cmd)
         return
     end
 
-    os.execute(('S4_DOCTOR_PORT=%d nohup %s "%s" > /dev/null 2>&1 &'):format(API_PORT, nodeBin, serverJs))
+    os.execute(('S4_DOCTOR_PORT=%d nohup %s "%s" > "%s" 2>&1 &'):format(API_PORT, nodeBin, serverJs, logPath))
 end
 
 local function pidFilePath()

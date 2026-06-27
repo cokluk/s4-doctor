@@ -139,6 +139,22 @@ No token. Localhost-only usage is assumed.
 | GET | `/doctors` | Registered doctor.lua scripts |
 | POST | `/execute` | Run JSON command (sync, max 15s) |
 | DELETE | `/logs?source=all` | Clear log buffer |
+| GET | `/natives` | List all native namespaces with counts |
+| GET | `/natives/search?q=...` | Search natives by name, hash or keyword |
+| GET | `/natives/:namespace` | List all natives in a namespace |
+| GET | `/natives/:namespace/:hash` | Full native details (params, description, examples) |
+| POST | `/natives/refresh` | Re-download natives.json from runtime.fivem.net |
+| GET | `/peds` | List all ped types and DLC overview |
+| GET | `/peds/search?q=...` | Search peds by name, hash or keyword |
+| GET | `/peds/type/:type` | List all peds of a specific type (e.g. Animal) |
+| GET | `/peds/dlc/:dlc` | List all peds in a specific DLC (e.g. mpexecutive) |
+| GET | `/peds/info/:nameOrHash` | Full ped details (type, dlc, flags, bones) |
+| POST | `/peds/refresh` | Re-download peds.json from DurtyFree dumps |
+| GET | `/weapons` | List all weapon categories and DLC overview |
+| GET | `/weapons/search?q=...` | Search weapons by name, hash or keyword |
+| GET | `/weapons/category/:category` | List all weapons in a specific category |
+| GET | `/weapons/info/:nameOrHash` | Full weapon details (type, ammo, flags, tints) |
+| POST | `/weapons/refresh` | Re-download weapons.json from DurtyFree dumps |
 
 ### Internal (FiveM ↔ Node, localhost only)
 
@@ -224,6 +240,116 @@ Allowed `targetName` values: `ensure`, `restart`, `start`, `stop`, `refresh`.
 5. **Test** — start with `export`, then `event`, then broad-impact commands last
 6. **Verify** — `result.success` + `GET /logs?sinceSeq=...` for error logs
 7. **Fix** — if errors, update command and retry
+
+---
+
+## FiveM Natives Reference
+
+s4-doctor loads `natives.json` from `https://runtime.fivem.net/doc/natives.json` on startup and caches it locally. This gives agents access to ~5000+ FiveM native functions.
+
+### Search natives
+
+```bash
+curl "http://127.0.0.1:4789/natives/search?q=SetEntityCoords&limit=10"
+```
+
+Response:
+```json
+{
+  "success": true,
+  "query": "SetEntityCoords",
+  "count": 3,
+  "totalMatches": 3,
+  "results": [
+    {
+      "name": "SET_ENTITY_COORDS",
+      "hash": "0x06843DA7060A026B",
+      "ns": "ENTITY",
+      "params": "Entity entity, float xPos, float yPos, float zPos, ...",
+      "results": "void",
+      "score": 80
+    }
+  ]
+}
+```
+
+### Get native details
+
+```bash
+curl "http://127.0.0.1:4789/natives/ENTITY/0x06843DA7060A026B"
+```
+
+Returns full native info: params with types/descriptions, return type, description, examples, aliases.
+
+### List namespaces
+
+```bash
+curl "http://127.0.0.1:4789/natives"
+```
+
+### MCP tools
+
+| Tool | Description |
+|------|-------------|
+| `s4_doctor_natives_search` | Search by name, hash or keyword |
+| `s4_doctor_natives_info` | Get full details (namespace + hash required) |
+| `s4_doctor_natives_list` | List namespaces or natives in a namespace |
+
+---
+
+## FiveM Peds Reference
+
+s4-doctor loads `peds.json` from `DurtyFree/gta-v-data-dumps` on startup and caches it locally. This gives agents access to all GTA V ped models, their hashes, types, and bone structures.
+
+### Search peds
+
+```bash
+curl "http://127.0.0.1:4789/peds/search?q=boar&limit=5"
+```
+
+### Get ped details
+
+```bash
+curl "http://127.0.0.1:4789/peds/info/a_c_boar"
+```
+
+Returns full ped info: name, hash, hexHash, type, DLC, relationship group, combat info, capabilities, and a bone sample.
+
+### MCP tools (Peds)
+
+| Tool | Description |
+|------|-------------|
+| `s4_doctor_peds_search` | Search by name, hash, type or DLC |
+| `s4_doctor_peds_info` | Get full details |
+| `s4_doctor_peds_list` | List by type, DLC, or get overview stats |
+
+---
+
+## FiveM Weapons Reference
+
+s4-doctor loads `weapons.json` from `DurtyFree/gta-v-data-dumps` on startup and caches it locally. This gives agents access to all GTA V weapon models, their hashes, categories, ammo types, components, flags, and tints.
+
+### Search weapons
+
+```bash
+curl "http://127.0.0.1:4789/weapons/search?q=pistol&limit=5"
+```
+
+### Get weapon details
+
+```bash
+curl "http://127.0.0.1:4789/weapons/info/WEAPON_PISTOL"
+```
+
+Returns full weapon info: name, hash, hexHash, category, DLC, ammo type, damage type, components, flags, and available tints.
+
+### MCP tools (Weapons)
+
+| Tool | Description |
+|------|-------------|
+| `s4_doctor_weapons_search` | Search by name, hash, category or DLC |
+| `s4_doctor_weapons_info` | Get full details |
+| `s4_doctor_weapons_list` | List by category, or get overview stats |
 
 ### Log polling
 
