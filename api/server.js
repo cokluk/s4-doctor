@@ -2,6 +2,9 @@ const express = require('express');
 const { randomBytes } = require('crypto');
 const fs = require('fs');
 const path = require('path');
+const nativesManager = require('./nativesManager');
+const pedsManager = require('./pedsManager');
+const weaponsManager = require('./weaponsManager');
 
 const PORT = parseInt(process.env.S4_DOCTOR_PORT || '4789', 10);
 const EXECUTE_TIMEOUT_MS = parseInt(process.env.S4_DOCTOR_TIMEOUT || '15000', 10);
@@ -13,359 +16,508 @@ app.set('trust proxy', false);
 app.use(express.json({ limit: '1mb' }));
 
 const state = {
-  serverLogs: [],
-  clientLogs: [],
-  seq: 0,
-  pending: [],
-  resultWaiters: new Map(),
-  doctors: { server: [], client: [] },
-  players: [],
-  fivem: {
-    connected: false,
-    lastPoll: null,
-    lastRegister: null,
-    resource: null,
-    version: null,
-  },
+	serverLogs: [],
+	clientLogs: [],
+	seq: 0,
+	pending: [],
+	resultWaiters: new Map(),
+	doctors: { server: [], client: [] },
+	players: [],
+	fivem: {
+		connected: false,
+		lastPoll: null,
+		lastRegister: null,
+		resource: null,
+		version: null,
+	},
 };
 
 function randomId(prefix) {
-  return `${prefix}_${randomBytes(8).toString('hex')}`;
+	return `${prefix}_${randomBytes(8).toString('hex')}`;
 }
 
 function isLocalhost(req) {
-  const ip = req.ip || req.socket?.remoteAddress || '';
-  return (
-    ip === '127.0.0.1' ||
-    ip === '::1' ||
-    ip === '::ffff:127.0.0.1' ||
-    ip.endsWith('127.0.0.1')
-  );
+	const ip = req.ip || req.socket?.remoteAddress || '';
+	return (
+		ip === '127.0.0.1' ||
+		ip === '::1' ||
+		ip === '::ffff:127.0.0.1' ||
+		ip.endsWith('127.0.0.1')
+	);
 }
 
 function localhostOnly(req, res, next) {
-  if (!isLocalhost(req)) {
-    return res.status(403).json({ success: false, error: 'localhost only' });
-  }
-  next();
+	if (!isLocalhost(req)) {
+		return res.status(403).json({ success: false, error: 'localhost only' });
+	}
+	next();
 }
 
 function normalizeLog(entry) {
-  const source = entry.source || entry.side || 'server';
-  return {
-    id: entry.id,
-    seq: entry.seq,
-    source,
-    side: entry.side || source,
-    level: entry.level || 'info',
-    message: String(entry.message || ''),
-    resource: entry.resource || null,
-    channel: entry.channel || null,
-    playerId: entry.playerId ?? null,
-    playerName: entry.playerName ?? null,
-    timestamp: entry.timestamp || Date.now(),
-  };
+	const source = entry.source || entry.side || 'server';
+	return {
+		id: entry.id,
+		seq: entry.seq,
+		source,
+		side: entry.side || source,
+		level: entry.level || 'info',
+		message: String(entry.message || ''),
+		resource: entry.resource || null,
+		channel: entry.channel || null,
+		playerId: entry.playerId ?? null,
+		playerName: entry.playerName ?? null,
+		timestamp: entry.timestamp || Date.now(),
+	};
 }
 
 function pushLog(entry) {
-  const normalized = normalizeLog(entry);
-  normalized.seq = ++state.seq;
-  normalized.id = normalized.seq;
-  const buf = normalized.source === 'client' ? state.clientLogs : state.serverLogs;
-  buf.push(normalized);
-  while (buf.length > MAX_LOGS) buf.shift();
-  return normalized;
+	const normalized = normalizeLog(entry);
+	normalized.seq = ++state.seq;
+	normalized.id = normalized.seq;
+	const buf = normalized.source === 'client' ? state.clientLogs : state.serverLogs;
+	buf.push(normalized);
+	while (buf.length > MAX_LOGS) buf.shift();
+	return normalized;
 }
 
 function pushLogsBatch(logs) {
-  if (!Array.isArray(logs)) return [];
-  return logs.map((e) => pushLog(e));
+	if (!Array.isArray(logs)) return [];
+	return logs.map((e) => pushLog(e));
 }
 
 function matchesFilters(entry, opts) {
-  const since = Number(opts.since) || 0;
-  if (entry.timestamp < since) return false;
+	const since = Number(opts.since) || 0;
+	if (entry.timestamp < since) return false;
 
-  if (opts.sinceSeq) {
-    const sinceSeq = Number(opts.sinceSeq) || 0;
-    if ((entry.seq || 0) <= sinceSeq) return false;
-  }
+	if (opts.sinceSeq) {
+		const sinceSeq = Number(opts.sinceSeq) || 0;
+		if ((entry.seq || 0) <= sinceSeq) return false;
+	}
 
-  if (opts.level && opts.level !== '' && entry.level !== opts.level) return false;
+	if (opts.level && opts.level !== '' && entry.level !== opts.level) return false;
 
-  const playerId = opts.playerId != null ? Number(opts.playerId) : null;
-  if (playerId != null && entry.playerId !== playerId) return false;
+	const playerId = opts.playerId != null ? Number(opts.playerId) : null;
+	if (playerId != null && entry.playerId !== playerId) return false;
 
-  return true;
+	return true;
 }
 
 function filterLogs(buf, opts = {}) {
-  const out = buf.filter((e) => matchesFilters(e, opts));
-  out.sort((a, b) => (a.seq || 0) - (b.seq || 0));
-  const limit = Math.min(Number(opts.limit) || 100, 500);
-  if (out.length > limit) return out.slice(out.length - limit);
-  return out;
+	const out = buf.filter((e) => matchesFilters(e, opts));
+	out.sort((a, b) => (a.seq || 0) - (b.seq || 0));
+	const limit = Math.min(Number(opts.limit) || 100, 500);
+	if (out.length > limit) return out.slice(out.length - limit);
+	return out;
 }
 
 function buildLogsResponse(opts = {}) {
-  const source = opts.source || 'all';
-  const response = {
-    success: true,
-    meta: {
-      bufferSize: MAX_LOGS,
-      latestSeq: state.seq,
-    },
-  };
+	const source = opts.source || 'all';
+	const response = {
+		success: true,
+		meta: {
+			bufferSize: MAX_LOGS,
+			latestSeq: state.seq,
+		},
+	};
 
-  if (source === 'all') {
-    response.server = { count: 0, logs: filterLogs(state.serverLogs, opts) };
-    response.client = { count: 0, logs: filterLogs(state.clientLogs, opts) };
-    response.server.count = response.server.logs.length;
-    response.client.count = response.client.logs.length;
-  } else if (source === 'server') {
-    const logs = filterLogs(state.serverLogs, opts);
-    response.server = { count: logs.length, logs };
-  } else if (source === 'client') {
-    const logs = filterLogs(state.clientLogs, opts);
-    response.client = { count: logs.length, logs };
-  }
+	if (source === 'all') {
+		response.server = { count: 0, logs: filterLogs(state.serverLogs, opts) };
+		response.client = { count: 0, logs: filterLogs(state.clientLogs, opts) };
+		response.server.count = response.server.logs.length;
+		response.client.count = response.client.logs.length;
+	} else if (source === 'server') {
+		const logs = filterLogs(state.serverLogs, opts);
+		response.server = { count: logs.length, logs };
+	} else if (source === 'client') {
+		const logs = filterLogs(state.clientLogs, opts);
+		response.client = { count: logs.length, logs };
+	}
 
-  return response;
+	return response;
 }
 
 function getLogsSince(sinceSeq, limit = 50) {
-  const combined = [...state.serverLogs, ...state.clientLogs];
-  const filtered = combined
-    .filter((e) => (e.seq || 0) > sinceSeq)
-    .sort((a, b) => (a.seq || 0) - (b.seq || 0));
-  if (filtered.length > limit) return filtered.slice(filtered.length - limit);
-  return filtered;
+	const combined = [...state.serverLogs, ...state.clientLogs];
+	const filtered = combined
+		.filter((e) => (e.seq || 0) > sinceSeq)
+		.sort((a, b) => (a.seq || 0) - (b.seq || 0));
+	if (filtered.length > limit) return filtered.slice(filtered.length - limit);
+	return filtered;
 }
 
 function clearLogs(source = 'all') {
-  if (source === 'server' || source === 'all') state.serverLogs = [];
-  if (source === 'client' || source === 'all') state.clientLogs = [];
+	if (source === 'server' || source === 'all') state.serverLogs = [];
+	if (source === 'client' || source === 'all') state.clientLogs = [];
 }
 
 function updateFivemConnection() {
-  const now = Date.now();
-  state.fivem.connected =
-    state.fivem.lastPoll != null && now - state.fivem.lastPoll < STALE_MS;
+	const now = Date.now();
+	state.fivem.connected =
+		state.fivem.lastPoll != null && now - state.fivem.lastPoll < STALE_MS;
 }
 
 function waitForResult(requestId) {
-  return new Promise((resolve) => {
-    const timeout = setTimeout(() => {
-      state.resultWaiters.delete(requestId);
-      resolve({ success: false, error: 'timeout', requestId });
-    }, EXECUTE_TIMEOUT_MS);
+	return new Promise((resolve) => {
+		const timeout = setTimeout(() => {
+			state.resultWaiters.delete(requestId);
+			resolve({ success: false, error: 'timeout', requestId });
+		}, EXECUTE_TIMEOUT_MS);
 
-    state.resultWaiters.set(requestId, {
-      resolve: (result) => {
-        clearTimeout(timeout);
-        state.resultWaiters.delete(requestId);
-        resolve(result);
-      },
-      timeout,
-    });
-  });
+		state.resultWaiters.set(requestId, {
+			resolve: (result) => {
+				clearTimeout(timeout);
+				state.resultWaiters.delete(requestId);
+				resolve(result);
+			},
+			timeout,
+		});
+	});
 }
 
 function resolveResult(requestId, result) {
-  const waiter = state.resultWaiters.get(requestId);
-  if (waiter) waiter.resolve(result);
+	const waiter = state.resultWaiters.get(requestId);
+	if (waiter) waiter.resolve(result);
 }
 
 app.get('/health', (_req, res) => {
-  updateFivemConnection();
-  res.json({
-    ok: true,
-    service: 's4-doctor-api',
-    version: '2.1.0',
-    port: PORT,
-    logBufferSize: MAX_LOGS,
-    serverLogs: state.serverLogs.length,
-    clientLogs: state.clientLogs.length,
-    fivemConnected: state.fivem.connected,
-  });
+	updateFivemConnection();
+	res.json({
+		ok: true,
+		service: 's4-doctor-api',
+		version: '2.1.0',
+		port: PORT,
+		logBufferSize: MAX_LOGS,
+		serverLogs: state.serverLogs.length,
+		clientLogs: state.clientLogs.length,
+		fivemConnected: state.fivem.connected,
+	});
 });
 
 app.get('/status', (_req, res) => {
-  updateFivemConnection();
-  res.json({
-    success: true,
-    fivem: {
-      connected: state.fivem.connected,
-      lastPoll: state.fivem.lastPoll,
-      lastRegister: state.fivem.lastRegister,
-      resource: state.fivem.resource,
-      version: state.fivem.version,
-    },
-    pendingCount: state.pending.length,
-    logCounts: {
-      server: state.serverLogs.length,
-      client: state.clientLogs.length,
-      latestSeq: state.seq,
-    },
-  });
+	updateFivemConnection();
+	res.json({
+		success: true,
+		fivem: {
+			connected: state.fivem.connected,
+			lastPoll: state.fivem.lastPoll,
+			lastRegister: state.fivem.lastRegister,
+			resource: state.fivem.resource,
+			version: state.fivem.version,
+		},
+		pendingCount: state.pending.length,
+		logCounts: {
+			server: state.serverLogs.length,
+			client: state.clientLogs.length,
+			latestSeq: state.seq,
+		},
+	});
 });
 
 app.get('/logs', (req, res) => {
-  res.json(buildLogsResponse({
-    source: 'all',
-    since: req.query.since,
-    sinceSeq: req.query.sinceSeq,
-    limit: req.query.limit,
-    level: req.query.level,
-    playerId: req.query.playerId,
-  }));
+	res.json(buildLogsResponse({
+		source: 'all',
+		since: req.query.since,
+		sinceSeq: req.query.sinceSeq,
+		limit: req.query.limit,
+		level: req.query.level,
+		playerId: req.query.playerId,
+	}));
 });
 
 app.get('/logs/server', (req, res) => {
-  res.json(buildLogsResponse({
-    source: 'server',
-    since: req.query.since,
-    sinceSeq: req.query.sinceSeq,
-    limit: req.query.limit,
-    level: req.query.level,
-  }));
+	res.json(buildLogsResponse({
+		source: 'server',
+		since: req.query.since,
+		sinceSeq: req.query.sinceSeq,
+		limit: req.query.limit,
+		level: req.query.level,
+	}));
 });
 
 app.get('/logs/client', (req, res) => {
-  res.json(buildLogsResponse({
-    source: 'client',
-    since: req.query.since,
-    sinceSeq: req.query.sinceSeq,
-    limit: req.query.limit,
-    level: req.query.level,
-    playerId: req.query.playerId,
-  }));
+	res.json(buildLogsResponse({
+		source: 'client',
+		since: req.query.since,
+		sinceSeq: req.query.sinceSeq,
+		limit: req.query.limit,
+		level: req.query.level,
+		playerId: req.query.playerId,
+	}));
 });
 
 app.delete('/logs', (req, res) => {
-  const source = req.query.source || req.body?.source || 'all';
-  clearLogs(source);
-  res.json({ success: true, cleared: source });
+	const source = req.query.source || req.body?.source || 'all';
+	clearLogs(source);
+	res.json({ success: true, cleared: source });
 });
 
 app.get('/doctors', (_req, res) => {
-  res.json({ success: true, ...state.doctors });
+	res.json({ success: true, ...state.doctors });
 });
 
 app.get('/players', (_req, res) => {
-  updateFivemConnection();
-  res.json({
-    success: true,
-    count: state.players.length,
-    players: state.players,
-    fivemConnected: state.fivem.connected,
-  });
+	updateFivemConnection();
+	res.json({
+		success: true,
+		count: state.players.length,
+		players: state.players,
+		fivemConnected: state.fivem.connected,
+	});
 });
 
 app.post('/execute', async (req, res) => {
-  const body = req.body || {};
+	const body = req.body || {};
 
-  if (typeof body.command === 'string' && body.command !== '' && !body.executionType) {
-    const requestId = body.requestId || randomId('req');
-    const sinceSeq = state.seq;
-    state.pending.push({
-      requestId,
-      command: { type: 'console', command: body.command, requestId },
-      createdAt: Date.now(),
-    });
-    const result = await waitForResult(requestId);
-    return res.json({ ...result, logsSince: getLogsSince(sinceSeq) });
-  }
+	if (typeof body.command === 'string' && body.command !== '' && !body.executionType) {
+		const requestId = body.requestId || randomId('req');
+		const sinceSeq = state.seq;
+		state.pending.push({
+			requestId,
+			command: { type: 'console', command: body.command, requestId },
+			createdAt: Date.now(),
+		});
+		const result = await waitForResult(requestId);
+		return res.json({ ...result, logsSince: getLogsSince(sinceSeq) });
+	}
 
-  const requestId = body.requestId || randomId('req');
-  const sinceSeq = state.seq;
-  const command = { ...body, requestId };
-  delete command.securityToken;
+	const requestId = body.requestId || randomId('req');
+	const sinceSeq = state.seq;
+	const command = { ...body, requestId };
+	delete command.securityToken;
 
-  state.pending.push({ requestId, command, createdAt: Date.now() });
-  const result = await waitForResult(requestId);
+	state.pending.push({ requestId, command, createdAt: Date.now() });
+	const result = await waitForResult(requestId);
 
-  res.json({
-    ...result,
-    requestId: result.requestId || requestId,
-    logsSince: getLogsSince(sinceSeq),
-  });
+	res.json({
+		...result,
+		requestId: result.requestId || requestId,
+		logsSince: getLogsSince(sinceSeq),
+	});
 });
 
 app.post('/internal/register', localhostOnly, (req, res) => {
-  const body = req.body || {};
-  state.fivem.lastRegister = Date.now();
-  state.fivem.lastPoll = Date.now();
-  state.fivem.connected = true;
-  state.fivem.resource = body.resource || 's4-doctor';
-  state.fivem.version = body.version || null;
+	const body = req.body || {};
+	state.fivem.lastRegister = Date.now();
+	state.fivem.lastPoll = Date.now();
+	state.fivem.connected = true;
+	state.fivem.resource = body.resource || 's4-doctor';
+	state.fivem.version = body.version || null;
 
-  if (body.doctors && typeof body.doctors === 'object') {
-    state.doctors.server = Array.isArray(body.doctors.server) ? body.doctors.server : [];
-    state.doctors.client = Array.isArray(body.doctors.client) ? body.doctors.client : [];
-  }
+	if (body.doctors && typeof body.doctors === 'object') {
+		state.doctors.server = Array.isArray(body.doctors.server) ? body.doctors.server : [];
+		state.doctors.client = Array.isArray(body.doctors.client) ? body.doctors.client : [];
+	}
 
-  res.json({ ok: true, port: PORT });
+	res.json({ ok: true, port: PORT });
 });
 
 app.post('/internal/doctors', localhostOnly, (req, res) => {
-  const body = req.body || {};
-  if (body.doctors && typeof body.doctors === 'object') {
-    state.doctors.server = Array.isArray(body.doctors.server) ? body.doctors.server : [];
-    state.doctors.client = Array.isArray(body.doctors.client) ? body.doctors.client : [];
-  }
-  res.json({ ok: true });
+	const body = req.body || {};
+	if (body.doctors && typeof body.doctors === 'object') {
+		state.doctors.server = Array.isArray(body.doctors.server) ? body.doctors.server : [];
+		state.doctors.client = Array.isArray(body.doctors.client) ? body.doctors.client : [];
+	}
+	res.json({ ok: true });
 });
 
 app.post('/internal/players', localhostOnly, (req, res) => {
-  state.fivem.lastPoll = Date.now();
-  const body = req.body || {};
-  state.players = Array.isArray(body.players) ? body.players : [];
-  res.json({ ok: true, count: state.players.length });
+	state.fivem.lastPoll = Date.now();
+	const body = req.body || {};
+	state.players = Array.isArray(body.players) ? body.players : [];
+	res.json({ ok: true, count: state.players.length });
 });
 
 app.post('/internal/logs', localhostOnly, (req, res) => {
-  state.fivem.lastPoll = Date.now();
-  const logs = req.body?.logs;
-  const added = pushLogsBatch(Array.isArray(logs) ? logs : logs ? [logs] : []);
-  res.json({ ok: true, added: added.length, latestSeq: state.seq });
+	state.fivem.lastPoll = Date.now();
+	const logs = req.body?.logs;
+	const added = pushLogsBatch(Array.isArray(logs) ? logs : logs ? [logs] : []);
+	res.json({ ok: true, added: added.length, latestSeq: state.seq });
 });
 
 app.get('/internal/pending', localhostOnly, (req, res) => {
-  state.fivem.lastPoll = Date.now();
-  state.fivem.connected = true;
+	state.fivem.lastPoll = Date.now();
+	state.fivem.connected = true;
 
-  const batch = state.pending.splice(0, 10);
-  res.json({
-    pending: batch.map((p) => p.command),
-  });
+	const batch = state.pending.splice(0, 10);
+	res.json({
+		pending: batch.map((p) => p.command),
+	});
 });
 
 app.post('/internal/result', localhostOnly, (req, res) => {
-  state.fivem.lastPoll = Date.now();
-  const { requestId, result } = req.body || {};
-  if (requestId) resolveResult(requestId, result || { success: false, error: 'empty result' });
-  res.json({ ok: true });
+	state.fivem.lastPoll = Date.now();
+	const { requestId, result } = req.body || {};
+	if (requestId) resolveResult(requestId, result || { success: false, error: 'empty result' });
+	res.json({ ok: true });
 });
 
+// ─── Natives API ──────────────────────────────────────────────────────────
+
+app.get('/natives', (_req, res) => {
+	if (!nativesManager.isLoaded()) {
+		return res.status(503).json({ success: false, error: 'natives not loaded yet — try again shortly' });
+	}
+	res.json(nativesManager.getNamespaces());
+});
+
+app.get('/natives/status', (_req, res) => {
+	res.json({ success: true, ...nativesManager.getStatus() });
+});
+
+app.get('/natives/search', (req, res) => {
+	if (!nativesManager.isLoaded()) {
+		return res.status(503).json({ success: false, error: 'natives not loaded yet' });
+	}
+	const q = req.query.q || req.query.query || '';
+	if (!q) {
+		return res.status(400).json({ success: false, error: 'query parameter "q" is required' });
+	}
+	res.json(nativesManager.searchNatives(q, {
+		limit: req.query.limit,
+		namespace: req.query.namespace || req.query.ns,
+	}));
+});
+
+app.post('/natives/refresh', async (_req, res) => {
+	const result = await nativesManager.refreshNatives();
+	res.json(result);
+});
+
+app.get('/natives/:namespace', (req, res) => {
+	if (!nativesManager.isLoaded()) {
+		return res.status(503).json({ success: false, error: 'natives not loaded yet' });
+	}
+	res.json(nativesManager.getNativesByNamespace(req.params.namespace));
+});
+
+app.get('/natives/:namespace/:hash', (req, res) => {
+	if (!nativesManager.isLoaded()) {
+		return res.status(503).json({ success: false, error: 'natives not loaded yet' });
+	}
+	res.json(nativesManager.getNativeByHash(req.params.namespace, req.params.hash));
+});
+
+// ─── Peds API ─────────────────────────────────────────────────────────────
+
+app.get('/peds', (_req, res) => {
+	if (!pedsManager.isLoaded()) {
+		return res.status(503).json({ success: false, error: 'peds not loaded yet — try again shortly' });
+	}
+	res.json(pedsManager.getOverview());
+});
+
+app.get('/peds/status', (_req, res) => {
+	res.json({ success: true, ...pedsManager.getStatus() });
+});
+
+app.get('/peds/search', (req, res) => {
+	if (!pedsManager.isLoaded()) {
+		return res.status(503).json({ success: false, error: 'peds not loaded yet' });
+	}
+	const q = req.query.q || req.query.query || '';
+	if (!q) {
+		return res.status(400).json({ success: false, error: 'query parameter "q" is required' });
+	}
+	res.json(pedsManager.searchPeds(q, {
+		limit: req.query.limit,
+		pedtype: req.query.type || req.query.pedtype,
+		dlc: req.query.dlc,
+	}));
+});
+
+app.post('/peds/refresh', async (_req, res) => {
+	const result = await pedsManager.refreshPeds();
+	res.json(result);
+});
+
+app.get('/peds/type/:type', (req, res) => {
+	if (!pedsManager.isLoaded()) {
+		return res.status(503).json({ success: false, error: 'peds not loaded yet' });
+	}
+	res.json(pedsManager.getPedsByType(req.params.type));
+});
+
+app.get('/peds/dlc/:dlc', (req, res) => {
+	if (!pedsManager.isLoaded()) {
+		return res.status(503).json({ success: false, error: 'peds not loaded yet' });
+	}
+	res.json(pedsManager.getPedsByDlc(req.params.dlc));
+});
+
+app.get('/peds/info/:nameOrHash', (req, res) => {
+	if (!pedsManager.isLoaded()) {
+		return res.status(503).json({ success: false, error: 'peds not loaded yet' });
+	}
+	res.json(pedsManager.getPedByName(req.params.nameOrHash));
+});
+
+// ─── Weapons API ──────────────────────────────────────────────────────────
+
+app.get('/weapons', (_req, res) => {
+	if (!weaponsManager.isLoaded()) {
+		return res.status(503).json({ success: false, error: 'weapons not loaded yet — try again shortly' });
+	}
+	res.json(weaponsManager.getOverview());
+});
+
+app.get('/weapons/status', (_req, res) => {
+	res.json({ success: true, ...weaponsManager.getStatus() });
+});
+
+app.get('/weapons/search', (req, res) => {
+	if (!weaponsManager.isLoaded()) {
+		return res.status(503).json({ success: false, error: 'weapons not loaded yet' });
+	}
+	const q = req.query.q || req.query.query || '';
+	if (!q) {
+		return res.status(400).json({ success: false, error: 'query parameter "q" is required' });
+	}
+	res.json(weaponsManager.searchWeapons(q, {
+		limit: req.query.limit,
+		category: req.query.category,
+		dlc: req.query.dlc,
+	}));
+});
+
+app.post('/weapons/refresh', async (_req, res) => {
+	const result = await weaponsManager.refreshWeapons();
+	res.json(result);
+});
+
+app.get('/weapons/category/:category', (req, res) => {
+	if (!weaponsManager.isLoaded()) {
+		return res.status(503).json({ success: false, error: 'weapons not loaded yet' });
+	}
+	res.json(weaponsManager.getWeaponsByCategory(req.params.category));
+});
+
+app.get('/weapons/info/:nameOrHash', (req, res) => {
+	if (!weaponsManager.isLoaded()) {
+		return res.status(503).json({ success: false, error: 'weapons not loaded yet' });
+	}
+	res.json(weaponsManager.getWeaponByName(req.params.nameOrHash));
+});
+
+// ─── 404 ──────────────────────────────────────────────────────────────────
+
 app.use((_req, res) => {
-  res.status(404).json({ success: false, error: 'not_found' });
+	res.status(404).json({ success: false, error: 'not_found' });
 });
 
 const PID_FILE = path.join(__dirname, '.api.pid');
 
 function writePidFile() {
-  try {
-    fs.writeFileSync(PID_FILE, String(process.pid));
-  } catch (_) {
-  }
+	try {
+		fs.writeFileSync(PID_FILE, String(process.pid));
+	} catch (_) {
+	}
 }
 
 function removePidFile() {
-  try {
-    fs.unlinkSync(PID_FILE);
-  } catch (_) {
-  }
+	try {
+		fs.unlinkSync(PID_FILE);
+	} catch (_) {
+	}
 }
 
 process.on('exit', removePidFile);
@@ -373,19 +525,30 @@ process.on('SIGINT', () => process.exit(0));
 process.on('SIGTERM', () => process.exit(0));
 
 const server = app.listen(PORT, '127.0.0.1', () => {
-  writePidFile();
-  console.log(`[s4-doctor-api] http://127.0.0.1:${PORT}`);
-  console.log('[s4-doctor-api] Agent: GET /health, GET /logs, POST /execute');
-  console.log('[s4-doctor-api] FiveM bridge: /internal/* (localhost only)');
+	writePidFile();
+	console.log(`[s4-doctor-api] http://127.0.0.1:${PORT}`);
+	console.log('[s4-doctor-api] Agent: GET /health, GET /logs, POST /execute, GET /natives, GET /peds');
+	console.log('[s4-doctor-api] FiveM bridge: /internal/* (localhost only)');
+
+	// Load datasets asynchronously (non-blocking)
+	nativesManager.loadNatives().catch((err) => {
+		console.warn('[s4-doctor-api] Natives load warning:', err.message);
+	});
+	pedsManager.loadPeds().catch((err) => {
+		console.warn('[s4-doctor-api] Peds load warning:', err.message);
+	});
+	weaponsManager.loadWeapons().catch((err) => {
+		console.warn('[s4-doctor-api] Weapons load warning:', err.message);
+	});
 });
 
 server.on('error', (err) => {
-  if (err && err.code === 'EADDRINUSE') {
-    console.log(`[s4-doctor-api] Port ${PORT} already in use — existing instance assumed`);
-    process.exit(0);
-    return;
-  }
+	if (err && err.code === 'EADDRINUSE') {
+		console.log(`[s4-doctor-api] Port ${PORT} already in use — existing instance assumed`);
+		process.exit(0);
+		return;
+	}
 
-  console.error('[s4-doctor-api] listen error:', err);
-  process.exit(1);
+	console.error('[s4-doctor-api] listen error:', err);
+	process.exit(1);
 });

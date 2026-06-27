@@ -89,6 +89,12 @@ Full protocol: [docs/AGENT_GUIDE.md](docs/AGENT_GUIDE.md)
 | GET | `/players` | Online players |
 | GET | `/doctors` | Registered doctor.lua scripts |
 | POST | `/execute` | Run a structured command |
+| GET | `/natives` | List FiveM native namespaces |
+| GET | `/natives/search?q=...` | Search native functions |
+| GET | `/peds` | List FiveM ped types and DLC overview |
+| GET | `/peds/search?q=...` | Search ped models |
+| GET | `/weapons` | List FiveM weapon categories and DLC overview |
+| GET | `/weapons/search?q=...` | Search weapon models |
 
 ## In-game commands
 

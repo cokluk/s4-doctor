@@ -6,6 +6,7 @@ bridge/
 # --- FiveM runtime ---
 .yarn.installed
 api/.api.pid
+api/data/
 
 # --- Node.js ---
 node_modules/
