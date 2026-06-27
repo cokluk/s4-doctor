@@ -4,16 +4,34 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Semver without v prefix (e.g. 2.1.1)'
+        required: true
+        default: '2.1.1'
 
 permissions:
   contents: write
 
 jobs:
-  build:
-    name: Build VSIX
+  release:
+    name: Build and publish GitHub Release
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="v${{ github.event.inputs.version }}"
+          else
+            TAG="${GITHUB_REF_NAME}"
+          fi
+          VERSION="${TAG#v}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - uses: actions/setup-node@v4
         with:
@@ -21,22 +39,50 @@ jobs:
           cache: npm
           cache-dependency-path: vscode-extension/package-lock.json
 
-      - name: Build extension
+      - name: Build VS Code extension (VSIX)
         working-directory: vscode-extension
         run: |
           npm ci
           npm run compile
           npx --yes @vscode/vsce@latest package --no-dependencies
+          test "$(node -p "require('./package.json').publisher")" = "cokluk"
+          VSIX=$(ls -1 *.vsix | head -1)
+          cp "$VSIX" "cokluk.s4-doctor-${{ steps.version.outputs.version }}.vsix"
 
-      - name: Upload VSIX
-        uses: actions/upload-artifact@v4
-        with:
-          name: s4-doctor-vscode-${{ github.ref_name }}
-          path: vscode-extension/*.vsix
-          if-no-files-found: error
+      - name: Package FiveM resource
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          git archive --format=zip --output "s4-doctor-${VERSION}.zip" HEAD
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: vscode-extension/*.vsix
+          tag_name: ${{ steps.version.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          name: s4-doctor ${{ steps.version.outputs.version }}
           generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            s4-doctor-${{ steps.version.outputs.version }}.zip
+            vscode-extension/cokluk.s4-doctor-${{ steps.version.outputs.version }}.vsix
+          body: |
+            ## FiveM resource
+
+            1. Download `s4-doctor-${{ steps.version.outputs.version }}.zip`
+            2. Extract into your server's `resources/` folder
+            3. Add to `server.cfg`:
+
+            ```cfg
+            ensure yarn
+            ensure webpack
+            ensure s4-doctor
+
+            set s4_doctor_bridge "http://127.0.0.1:4789"
+            add_ace resource.s4-doctor command allow
+            ```
+
+            ## VS Code / Cursor extension
+
+            Install `cokluk.s4-doctor-${{ steps.version.outputs.version }}.vsix` via **Extensions → Install from VSIX…**
+
+            Publisher: **cokluk** · Extension ID: **cokluk.s4-doctor**
