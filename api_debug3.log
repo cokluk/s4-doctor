@@ -1,0 +1,6 @@
+[s4-doctor-api] http://127.0.0.1:4789
+[s4-doctor-api] Agent: GET /health, GET /logs, POST /execute, GET /natives, GET /peds
+[s4-doctor-api] FiveM bridge: /internal/* (localhost only)
+[s4-doctor-api] Loaded 6416 natives from cache (44 namespaces)
+[s4-doctor-api] Loaded 1109 peds from cache (11 types)
+[s4-doctor-api] Loaded 184 weapons from cache (20 categories)
