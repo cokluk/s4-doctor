@@ -1,0 +1,33 @@
+# --- Local / reference (not shipped with the resource) ---
+referanslar/
+s4-doctor.sln
+bridge/
+
+# --- FiveM runtime ---
+.yarn.installed
+api/.api.pid
+
+# --- Node.js ---
+node_modules/
+**/node_modules/
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# --- VS Code extension (build outputs) ---
+vscode-extension/out/
+vscode-extension/.vscode-test/
+*.vsix
+
+# --- OS / IDE ---
+.DS_Store
+Thumbs.db
+*.suo
+*.user
+.idea/
+*.swp
+*~
+
+# --- Env / secrets ---
+.env
+.env.*

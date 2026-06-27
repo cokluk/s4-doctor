@@ -1,0 +1,13 @@
+# s4-doctor server.cfg example
+# s4-doctor cannot restart/stop/refresh itself (hub protection).
+
+ensure yarn
+ensure webpack
+ensure s4-doctor
+
+# Copy examples/doctor-test to your resources folder, then:
+# ensure doctor-test
+
+set s4_doctor_bridge "http://127.0.0.1:4789"
+
+add_ace resource.s4-doctor command allow

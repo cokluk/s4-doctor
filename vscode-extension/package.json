@@ -1,0 +1,98 @@
+{
+  "name": "s4-doctor",
+  "displayName": "s4-doctor â€” FiveM Debug Agent",
+  "description": "Flutter doctor-style debug companion for FiveM scripting. Live logs, execute hub, AI agent integration.",
+  "version": "2.1.0",
+  "publisher": "s4-doctor",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Debuggers",
+    "Other"
+  ],
+  "keywords": [
+    "fivem",
+    "lua",
+    "debug",
+    "cursor",
+    "ai"
+  ],
+  "activationEvents": [
+    "onStartupFinished",
+    "workspaceContains:**/fxmanifest.lua"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "s4-doctor.checkHealth",
+        "title": "s4-doctor: Run Doctor Check",
+        "category": "s4-doctor"
+      },
+      {
+        "command": "s4-doctor.showLogs",
+        "title": "s4-doctor: Show Logs",
+        "category": "s4-doctor"
+      },
+      {
+        "command": "s4-doctor.execute",
+        "title": "s4-doctor: Execute Command (JSON)",
+        "category": "s4-doctor"
+      },
+      {
+        "command": "s4-doctor.clearLogs",
+        "title": "s4-doctor: Clear Logs",
+        "category": "s4-doctor"
+      },
+      {
+        "command": "s4-doctor.openDashboard",
+        "title": "s4-doctor: Open Dashboard",
+        "category": "s4-doctor"
+      }
+    ],
+    "configuration": {
+      "title": "s4-doctor",
+      "properties": {
+        "s4-doctor.apiUrl": {
+          "type": "string",
+          "default": "http://127.0.0.1:4789",
+          "description": "s4-doctor Node.js API base URL (convar: s4_doctor_bridge)"
+        },
+        "s4-doctor.pollInterval": {
+          "type": "number",
+          "default": 2000,
+          "minimum": 500,
+          "description": "Log polling interval in milliseconds"
+        },
+        "s4-doctor.autoPoll": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically poll logs and update output channel"
+        }
+      }
+    },
+    "snippets": [
+      {
+        "language": "lua",
+        "path": "./snippets/lua.json"
+      }
+    ]
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "vsce package",
+    "vscode:prepublish": "npm run compile"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.3.3"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/s4-doctor/s4-doctor.git"
+  }
+}

@@ -1,0 +1,66 @@
+---
+description: Use s4-doctor debug tool when developing FiveM scripts
+globs: **/*.{lua,js,ts}
+alwaysApply: false
+---
+
+# s4-doctor — FiveM AI Debug Companion
+
+When developing FiveM resources, use the **s4-doctor API** (`http://127.0.0.1:4789`):
+
+## Connection check
+
+1. `GET /health` — `fivemConnected: true` required
+2. `GET /status` — resource registration details
+
+## Trigger tests
+
+3. `POST /execute` — run export/event/callback/console command
+4. `GET /logs?sinceSeq=N` — verify result from logs
+
+## Local function testing
+
+Add to the target script's `fxmanifest.lua`:
+
+```lua
+shared_script '@s4-doctor/doctor.lua'
+```
+
+Expose on the Lua side:
+
+```lua
+Doctor.expose('FunctionName', FunctionName)
+```
+
+## Execute example
+
+```json
+{
+  "targetResource": "my-resource",
+  "executionType": "export",
+  "frameworkType": "ox",
+  "targetName": "MyFunction",
+  "arguments": [],
+  "side": "server"
+}
+```
+
+Console command:
+
+```json
+{ "command": "ensure my-resource" }
+```
+
+## Workflow (agent)
+
+1. Verify connection with `/health`
+2. Make code changes
+3. Trigger test with `POST /execute`
+4. Check success/errors with `/logs?sinceSeq=N`
+5. If errors, fix based on log messages
+
+## VS Code extension
+
+Command palette: `s4-doctor: Run Doctor Check`, `s4-doctor: Execute Command`
+
+Setting: `s4-doctor.apiUrl` (default `http://127.0.0.1:4789`)

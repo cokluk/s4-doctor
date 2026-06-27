@@ -1,0 +1,7 @@
+{
+  "name": "s4-doctor-api",
+  "version": "2.1.0",
+  "description": "s4-doctor Node.js API bridge for AI agents (dependencies installed at resource root via FiveM yarn)",
+  "main": "server.js",
+  "private": true
+}

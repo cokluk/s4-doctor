@@ -1,0 +1,9 @@
+{
+  "name": "s4-doctor",
+  "version": "2.1.0",
+  "private": true,
+  "description": "s4-doctor resource — express dependency for FiveM yarn builder",
+  "dependencies": {
+    "express": "^4.21.2"
+  }
+}

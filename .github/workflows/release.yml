@@ -1,0 +1,42 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build VSIX
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: vscode-extension/package-lock.json
+
+      - name: Build extension
+        working-directory: vscode-extension
+        run: |
+          npm ci
+          npm run compile
+          npx --yes @vscode/vsce@latest package --no-dependencies
+
+      - name: Upload VSIX
+        uses: actions/upload-artifact@v4
+        with:
+          name: s4-doctor-vscode-${{ github.ref_name }}
+          path: vscode-extension/*.vsix
+          if-no-files-found: error
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: vscode-extension/*.vsix
+          generate_release_notes: true

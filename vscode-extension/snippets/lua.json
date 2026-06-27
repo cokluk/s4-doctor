@@ -1,0 +1,31 @@
+{
+  "Doctor.expose": {
+    "prefix": "doctor-expose",
+    "body": [
+      "Doctor.expose('${1:functionName}', ${1:functionName})"
+    ],
+    "description": "Expose a local function to s4-doctor execute hub"
+  },
+  "s4-doctor fxmanifest inject": {
+    "prefix": "doctor-fxmanifest",
+    "body": [
+      "shared_script '@s4-doctor/doctor.lua'"
+    ],
+    "description": "Add doctor.lua shared script to fxmanifest"
+  },
+  "s4-doctor execute export": {
+    "prefix": "doctor-execute-export",
+    "body": [
+      "-- Test via s4-doctor POST /execute:",
+      "-- {",
+      "--   \"targetResource\": \"${1:resource-name}\",",
+      "--   \"executionType\": \"export\",",
+      "--   \"frameworkType\": \"${2|ox,qb,esx,standalone|}\",",
+      "--   \"targetName\": \"${3:FunctionName}\",",
+      "--   \"arguments\": [${4:}],",
+      "--   \"side\": \"${5|server,client|}\"",
+      "-- }"
+    ],
+    "description": "s4-doctor execute JSON template comment"
+  }
+}

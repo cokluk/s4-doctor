@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>s4-doctor Logs</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="app" class="hidden">
+    <header>
+      <div class="brand">
+        <span class="dot"></span>
+        <h1>s4-doctor</h1>
+        <span class="subtitle">Log Dashboard</span>
+      </div>
+      <div class="controls">
+        <label class="toggle">
+          <input type="checkbox" id="autoScroll" checked />
+          Auto-scroll
+        </label>
+        <button id="btnClear" type="button">Clear</button>
+        <button id="btnFocus" type="button">Focus</button>
+        <button id="btnClose" type="button">Close (Esc)</button>
+      </div>
+    </header>
+
+    <nav class="tabs">
+      <button class="tab active" data-tab="all">All</button>
+      <button class="tab" data-tab="server">Server</button>
+      <button class="tab" data-tab="client">Client</button>
+    </nav>
+
+    <main>
+      <div id="logAll" class="panel active"></div>
+      <div id="logServer" class="panel"></div>
+      <div id="logClient" class="panel"></div>
+    </main>
+
+    <footer>
+      <span id="stats">0 logs</span>
+      <span id="seq">seq: 0</span>
+    </footer>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>

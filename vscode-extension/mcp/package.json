@@ -1,0 +1,16 @@
+{
+  "name": "s4-doctor-mcp",
+  "version": "1.0.0",
+  "private": true,
+  "description": "MCP server for s4-doctor FiveM debug API",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
