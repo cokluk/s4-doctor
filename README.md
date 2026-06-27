@@ -144,22 +144,7 @@ Push a version tag to trigger [`.github/workflows/release.yml`](.github/workflow
 
 - `s4-doctor-{version}.zip` — FiveM resource (git-tracked files only)
 - `cokluk.s4-doctor-{version}.vsix` — VS Code / Cursor extension
-
-### First release (no tag yet)
-
-1. Push this repo to GitHub (include `.github/workflows/release.yml`)
-2. Open **Actions → Release → Run workflow**
-3. Enter version `2.1.1` and run — the **Releases** page is populated automatically
-
-### Later releases
-
-```bash
-git tag v2.1.2
-git push origin v2.1.2
-```
-
-Use semver tags with a `v` prefix (`v2.1.1`, `v2.2.0`, …).
-
+ 
 ## Documentation
 
 - [Agent guide](docs/AGENT_GUIDE.md) — execute JSON schema, workflow, API reference
